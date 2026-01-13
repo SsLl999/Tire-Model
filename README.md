@@ -1,3 +1,4 @@
+**THIS IS A WORK IN PROGRESS AND EXPERIMENTAL, AI TOOLS ARE BEING USED IN DEVELOPEMENT**
 # Tire Energy Dissipation Model
 
 A Python simulation for modeling tire longitudinal forces and energy dissipation during slip conditions.
