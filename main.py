@@ -5,14 +5,18 @@ Runs experiments and generates plots.
 
 import numpy as np
 import matplotlib.pyplot as plt
-from tire_model import compute_fx, TireParams, validate_fx_model
+from tire_model import (
+    compute_fx, TireParams, validate_fx_model,
+    brush_model_field, brush_model_diagnostics
+)
 from dissipation import (
     compute_pdiss, compute_pdiss_dissipated, compute_ediss, validate_dissipation
 )
 
 
-# Default parameters
-DEFAULT_PARAMS = TireParams(mu=1.0, Ck=50000.0)
+# Default parameters for brush model
+# mu: friction coefficient, a: half contact patch length (m), kx: bristle stiffness (N/m^2)
+DEFAULT_PARAMS = TireParams(mu=1.0, a=0.1, kx=1e6)
 DEFAULT_V = 20.0  # m/s
 
 
@@ -150,10 +154,99 @@ def experiment_b_time_domain():
     }
 
 
+def experiment_c_brush_field_diagnostics():
+    """
+    Experiment C: Brush model field and diagnostics for a representative case.
+    Plots f_array(s) vs s and q_array(s) vs s, and prints diagnostics.
+    """
+    print("Running Experiment C: Brush model field and diagnostics")
+    
+    # Representative operating condition
+    kappa = 0.10  # Longitudinal slip ratio
+    Fz = 900.0  # N
+    V = DEFAULT_V
+    params = DEFAULT_PARAMS
+    
+    # Compute field arrays
+    s_array, q_array, f_array, adhesion_mask = brush_model_field(kappa, Fz, params, n_points=200)
+    
+    # Compute diagnostics
+    diag = brush_model_diagnostics(kappa, Fz, V, params)
+    
+    # Contact patch parameters for plotting
+    L = 2.0 * params.a
+    w = Fz / L
+    f_limit = params.mu * w
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+    
+    # Plot f_array(s) vs s showing adhesion then friction clamp
+    ax1 = axes[0]
+    # Plot adhesion region
+    ax1.plot(s_array[adhesion_mask], f_array[adhesion_mask], 'b-', 
+             linewidth=2, label='Adhesion region', alpha=0.7)
+    # Plot sliding region
+    if not np.all(adhesion_mask):
+        ax1.plot(s_array[~adhesion_mask], f_array[~adhesion_mask], 'r-', 
+                 linewidth=2, label='Sliding region', alpha=0.7)
+    # Mark transition point
+    if diag['s_star'] < np.inf and diag['s_star'] <= L:
+        ax1.axvline(diag['s_star'], color='k', linestyle='--', 
+                   linewidth=1.5, label=f"s* = {diag['s_star']:.4f} m")
+    # Mark friction limit
+    ax1.axhline(f_limit, color='g', linestyle=':', 
+               linewidth=1.5, label=f'f_limit = {f_limit:.2f} N/m')
+    ax1.set_xlabel('Position along patch s (m)', fontsize=12)
+    ax1.set_ylabel('Local shear force f(s) (N/m)', fontsize=12)
+    ax1.set_title(f'Brush Model: Local Shear Force vs Position (κ={kappa:.3f}, Fz={Fz} N)', 
+                  fontsize=14)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+    ax1.set_xlim(0, L)
+    
+    # Plot q_array(s) vs s
+    ax2 = axes[1]
+    ax2.plot(s_array, q_array, 'b-', linewidth=2, label='Bristle displacement q(s)')
+    # Mark transition point if applicable
+    if diag['s_star'] < np.inf and diag['s_star'] <= L:
+        q_star = abs(kappa) * diag['s_star']
+        ax2.plot(diag['s_star'], q_star, 'ro', markersize=8, 
+                label=f'Transition point (s*, q*)')
+        ax2.axvline(diag['s_star'], color='k', linestyle='--', linewidth=1.5)
+    ax2.set_xlabel('Position along patch s (m)', fontsize=12)
+    ax2.set_ylabel('Bristle shear displacement q(s) (m)', fontsize=12)
+    ax2.set_title(f'Brush Model: Bristle Displacement vs Position (κ={kappa:.3f})', 
+                  fontsize=14)
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+    ax2.set_xlim(0, L)
+    
+    plt.tight_layout()
+    plt.savefig('experiment_c_brush_field.png', dpi=150)
+    print("  Saved plot: experiment_c_brush_field.png")
+    plt.close()
+    
+    # Print diagnostics summary
+    print("\nBrush Model Diagnostics Summary:")
+    print(f"  Operating condition: κ = {kappa:.3f}, Fz = {Fz:.1f} N, V = {V:.1f} m/s")
+    print(f"  Fx: {diag['Fx']:.2f} N")
+    print(f"  Contact patch length L: {diag['L']:.4f} m")
+    print(f"  Transition point s*: {diag['s_star']:.4f} m" if diag['s_star'] < np.inf else 
+          f"  Transition point s*: +inf (full adhesion)")
+    print(f"  Adhesion length: {diag['adhesion_length']:.4f} m")
+    print(f"  Sliding length: {diag['sliding_length']:.4f} m")
+    print(f"  Elastic energy stored E_elastic: {diag['E_elastic']:.2f} J")
+    print(f"  Sliding power dissipation Pdiss_sliding: {diag['Pdiss_sliding']:.2f} W")
+    print(f"  Global power dissipation Pdiss_global: {diag['Pdiss_global']:.2f} W")
+    
+    return diag
+
+
 def main():
     """Run all experiments."""
     print("=" * 60)
-    print("Tire Energy Dissipation Experiments")
+    print("Tire Energy Dissipation Experiments (Brush Model)")
     print("=" * 60)
     print()
     
@@ -161,6 +254,8 @@ def main():
     experiment_a_sweep_kappa()
     print()
     summary = experiment_b_time_domain()
+    print()
+    diag = experiment_c_brush_field_diagnostics()
     
     print()
     print("=" * 60)
